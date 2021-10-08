@@ -1,11 +1,10 @@
 // Require the necessary discord.js classes
 const { Client, Attachment } = require("discord.js");
-const Discord = require("discord.js");
 const { prefix, token } = require("./config.json");
 const ytdl = require("ytdl-core");
 const client = new Client();
 
-let servers = {};
+var servers = {};
 
 /*
 client.commands = new Discord.Collection();
@@ -17,23 +16,26 @@ for (const file of commandFiles) {
     client.commands.set(command.name, command);
 }*/
 
-client.on("message", (message) => {
-    if (!message.content.startsWith(prefix) || message.author.bot) return;
+client.once("ready", () => {
+    console.log("Ready!");
+});
 
-    const args = message.content.substring(prefix.length).split(" ");
+client.on("message", (message) => {
+    if (!message.content.startsWith(prefix)) return;
+
+    let args = message.content.substring(prefix.length).split(" ");
 
     switch (args[0]) {
         case "p":
             function play(connection, message) {
-                let server = servers[message.guild.id];
+                var server = servers[message.guild.id];
 
-                server.dispatcher = connection.playStream(
-                    ytdl(server.queue[0], { filter: "audioonly" })
-                );
+                stream = ytdl(server.queue[0], { filter: "audioonly" });
+                server.dispatcher = connection.play(stream);
 
                 server.queue.shift();
 
-                server.dispatch.on("end", () => {
+                server.dispatcher.on("end", () => {
                     if (server.queue[0]) {
                         play(connection, message);
                     } else {
@@ -49,7 +51,7 @@ client.on("message", (message) => {
             }
 
             // check that the person typing the command is in a voice channel
-            if (!message.member.voiceChannel) {
+            if (!message.member.voice.channel) {
                 message.channel.send("please be in a channel!");
                 return;
             }
@@ -59,23 +61,48 @@ client.on("message", (message) => {
                 servers[message.guild.id] = { queue: [] };
             }
 
-            let server = servers[message.guild.id];
+            var server = servers[message.guild.id];
 
             server.queue.push(args[1]);
 
             // check to see that the bot is on a server, and if it is not, join it.
             if (!message.guild.voiceConnection) {
-                message.member.voiceChannel.join().then((connection) => {
+                message.member.voice.channel.join().then((connection) => {
                     play(connection, message);
+                    message.channel.send("currently playing...");
                 });
             }
+
             break;
+
+        case "skip":
+            var server = servers[message.guild.id];
+
+            if (server.dispatcher) {
+                server.dispatcher.end();
+            }
+            message.channel.send("skipping current song");
+
+            break;
+
+        case "disconnect":
+            var server = servers[message.guild.id];
+            if (message.guild.voice.connection) {
+                for (let i = server.queue.length - 1; i >= 0; i--) {
+                    server.queue.splice(i, 1);
+                }
+
+                server.dispatcher.end();
+                message.channel.send("Bye! disconnecting...");
+                console.log("disconnect");
+            }
+
+            if (message.guild.connection) {
+                message.guild.voice.connection.disconnect();
+            }
     }
 });
 
-client.once("ready", () => {
-    console.log("Ready!");
-});
 client.once("reconnecting", () => {
     console.log("Reconnecting!");
 });
